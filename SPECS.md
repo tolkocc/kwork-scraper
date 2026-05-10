@@ -21,6 +21,9 @@ python3 kwork-scraper.py -c design -f sminreview=1 -f sonline=1
 
 # With custom database URL
 python3 kwork-scraper.py -c design -d postgresql://user:pass@host/db
+
+# With custom delay range 
+python3 kwork-scraper.py -c design -D 0.5 2.5
 ```
 
 | Option       | Short | Description                                        | Default              |
@@ -28,10 +31,44 @@ python3 kwork-scraper.py -c design -d postgresql://user:pass@host/db
 | `--category` | `-c`  | Category slug (repeatable)                         | —                    |
 | `--filter`   | `-f`  | Platform filter in `key=value` format (repeatable) | —                    |
 | `--database` | `-d`  | Database URL (SQLite or PostgreSQL)                | `sqlite:///kwork.db` |
+| `--delay`    | `-D`  | Requests delay range in seconds: MIN MAX           | `1.0 3.0`            |
 ### 📋️ Expected implementation
 
-Python standard `logging` and `argparse` libraries should be used. All exceptions should be handled and logged accordingly.  Current progress on how much `categories`, `kworks` and `reviews` are already scraped and how much left to scrape should also be logged. Progress tracking can be done internally for `categories`, through `total` field for `kworks` and through `goodReviews` and `badReviews` for `reviews`. All requests should be made with random delay from 1 to 3 seconds. `httpx.Client` aka `session` should be used everywhere rather than raw `httpx.get` or `httpx.post` to maintain cookies. New session per category. Kworks and reviews are requested under same category `session`.
+Python standard `logging` and `argparse` libraries should be used. All exceptions and warnings should be handled and logged accordingly. All requests should be made with random delay. `httpx.Client` aka `session` should be used everywhere rather than raw `httpx.get` or `httpx.post` to maintain cookies. New session per category. Kworks and reviews are requested under same category `session`. 
+### 💾 Logging implementation
 
+Our logger should be named `kwork-scraper`. `logging.basicConfig` should be initialized with `level` of `logging.WARNING`, so other libraries like `httpx` won't spam to logs. Only our `kwork-scraper` logger should be set to logging.INFO.
+
+Logging messages required for implementation to be complete:
+```python
+# After loading categories from website
+logger.info("Loaded %d categories from website", len(categories))
+
+# Categories to scrape after deduplication and conversions
+logger.info("Categories to scrape: %s", ", ".join(queue))
+
+# At start of each new category run
+logger.info("Processing category: %s (id=%d)", slug, category_id)
+
+# After first page requested
+logger.info("Total kworks for %s: %d", slug, total_kworks)
+
+# For each kwork
+logger.info("Scraping kwork %d: %d/%d", kwork_id, len(scraped) + 1, total_kworks)
+
+# After page of kworks collected
+logger.info("Category %s progress: %d/%d kworks scraped", slug, len(scraped), total_kworks)
+
+# After each page of reviews
+logger.info("Scraping positive reviews of %d: %d/%d ",kwork_id, len(scraped), total_positive)
+
+# After each page of reviews
+logger.info("Scraping negative reviews of %d: %d/%d ",kwork_id, len(scraped), total_negative)
+
+# After finish of each category run
+logger.info("Finished category %s: %d kworks scraped", slug, len(scraped))
+```
+All other information and warning logs for better user experience are left on developer's behalf.
 # 🗄️ Database and models
 
 Don't really want to bother with ORM libraries just for parsing. From now on and in future projects, we'll use `dataset` library for such tasks, docs can be found here: https://dataset.readthedocs.io/en/latest/
@@ -176,7 +213,7 @@ Just keep this in mind whenever `window.stateData` is mentioned.
 ## 📚️ Categories scraping
 > Related to [[#📚️ Categories model]]
 
-Entrypoint is `windows.stateData.headerMenu`, where `headerMenu` is an `array` with the following structure:
+Entrypoint is `window.stateData.headerMenu`, where `headerMenu` is an `array` with the following structure:
 ```javascript
 [
     {
@@ -230,6 +267,8 @@ Entrypoint is `windows.stateData.headerMenu`, where `headerMenu` is an `array` w
 `Логотипы` category is a child of `Логотип и брендинг` category while it is a child of `Дизайн` category. There are only 3 levels of categories, there is no need to dive any deeper. `columns` are only needed for website UI, so they make no practical sense for us at all.
 
 It's interesting that the L2 categories don't have an obtainable slug from website, but it can easily be obtained through any of their children, e.g.:  `Логотипы` slug is `logo/logotipy` so its parent `Логотип и брендинг` will have `logo` slug
+
+`categories` should be scraped on each run. Existing `categories` and their assigned `id` in database, should be left untouched to remain compatibility between runs. New categories should be added along existing ones. `name` and `parent_id` of `categories` can be overwritten in case they are changed.
 ### 📋️ Expected command-line behaviour
 >Related to [[#💻️ Command-line interface design]]
 
@@ -266,7 +305,7 @@ curl 'https://kwork.ru/catalog_kworks_filters/logo/logotipy' \
   --data-binary \
   $'------geckoformboundary7eb99b534fe3150abc344fcb9329873d\r\nContent-Disposition: form-data; name="sminreview"\r\n\r\n1\r\n------geckoformboundary7eb99b534fe3150abc344fcb9329873d\r\nContent-Disposition: form-data; name="page"\r\n\r\n2\r\n------geckoformboundary7eb99b534fe3150abc344fcb9329873d\r\nContent-Disposition: form-data; name="excludeIds"\r\n\r\n104445,34822518,38674574,18658149,9733560,9332464,9564042,34821619,5505798,18803992,1222611,67108,2510482,20848768,83042,19160944,247761,2745,22812218,20869474,32539303,15280132,8138,7418394\r\n------geckoformboundary7eb99b534fe3150abc344fcb9329873d\r\nContent-Disposition: form-data; name="onePage"\r\n\r\n1\r\n------geckoformboundary7eb99b534fe3150abc344fcb9329873d\r\nContent-Disposition: form-data; name="paymentTypes[]"\r\n\r\n\r\n------geckoformboundary7eb99b534fe3150abc344fcb9329873d--\r\n'
 ```
-Both `page` and `excludeIds` arguments are required for pagination to work. `excludeIds` is populated with all the kworks found beginning from the first to the  current page.
+Both `page` and `excludeIds` arguments are required for pagination to work. `excludeIds` is populated with all the kworks found beginning from the first to the  current page. End scraping, when `len(scraped) >= total_kworks`.
 
 Response structure is the following:
 ```javascript
@@ -345,7 +384,7 @@ Queries are being made to:
 GET https://kwork.ru/<url obtained from catalog>
 ```
 
-After downloading page's content, entrypoint to data is `windows.stateData.kwork`, where `kwork` is a `dictionary` with the following structure:
+After downloading page's content, entrypoint to data is `window.stateData.kwork`, where `kwork` is a `dictionary` with the following structure:
 ```json
 {
   "activeStatus": 1,
@@ -522,12 +561,12 @@ Response structure:
     "data": {
         "reviews": [
             {
-                "RID": "0000", // Redacted for privacy
+                "RID": "0", // Redacted for privacy
                 "comment": "...", // Redacted for privacy
                 "good": "1",
                 "bad": "0",
                 "time_added": 1776702442,
-                "PID": 0,
+                "PID": 0, // Redacted for privacy
                 "order_id": 0, // Take this as id for reviews, because there can be only one review per order and I'm not sure what are RID or PID for
                 "auto_mode": null,
                 "USERID": "0000", // Redacted for privacy
@@ -541,8 +580,8 @@ Response structure:
             }
             // Structure repeats after that
         ],
-        "goodReviews": 135,
-        "badReviews": 0,
+        "goodReviews": 135, // Use this for total_positive
+        "badReviews": 0, // Use this for total_negative
         "ratingAverage": {
             "id": 16922,
             "kwork_id": 34822518,
