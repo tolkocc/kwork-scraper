@@ -101,6 +101,22 @@ def extract_state_data(html: str):
     except json.JSONDecodeError:
         return None
 
+def safe_request(method: str, session: httpx.Client, url: str, retries: int = 3, **kwargs) -> httpx.Response | None:
+    """Safely make an HTTP request with retries and exponential backoff"""
+    for attempt in range(retries):
+        try:
+            resp = session.request(method, url, **kwargs)
+            resp.raise_for_status()
+            return resp
+        except httpx.HTTPError as e:
+            logger.warning(f"HTTP error on {url} (Attempt {attempt + 1}/{retries}): {e}")
+            if attempt < retries - 1:
+                # Exponential backoff: 2s, 4s, 8s...
+                time.sleep(2 ** (attempt + 1)) 
+            else:
+                logger.error(f"Failed to fetch {url} after {retries} attempts.")
+                return None
+
 
 # --- Database ---
 
@@ -159,8 +175,11 @@ def get_db_category_id_by_slug(db, slug: str) -> int | None:
 
 
 def load_categories(session: httpx.Client) -> list[dict]:
-    resp = session.get(f"{BASE_URL}/")
-    resp.raise_for_status()
+    resp = safe_request("GET", session, f"{BASE_URL}/")
+    if not resp:
+        logger.error("Failed to load main page for categories")
+        return []
+    
     sd = extract_state_data(resp.text)
     if not sd:
         logger.error("Failed to extract stateData from main page")
@@ -307,8 +326,10 @@ def fetch_catalog_page(
     headers = dict(HEADERS_TEMPLATE)
     headers["Referer"] = f"{BASE_URL}/categories/{slug}"
 
-    resp = session.post(url, data=data, headers=headers)
-    resp.raise_for_status()
+    resp = safe_request("POST", session, url, data=data, headers=headers)
+    if not resp:
+        return None
+    
     try:
         return resp.json()
     except json.JSONDecodeError:
@@ -321,8 +342,10 @@ def fetch_catalog_page(
 
 def scrape_kwork_page(session: httpx.Client, kwork_url: str, category_id: int, db):
     url = urljoin(BASE_URL, kwork_url)
-    resp = session.get(url)
-    resp.raise_for_status()
+    resp = safe_request("GET", session, url)
+    if not resp:
+        return
+    
     sd = extract_state_data(resp.text)
     if not sd:
         logger.error("Failed to extract stateData from %s", kwork_url)
@@ -423,12 +446,16 @@ def scrape_reviews(session: httpx.Client, kwork_id: int, db):
                 "offset": offset,
                 "limit": limit,
             }
-            resp = session.post(
+            resp = safe_request(
+                "POST", 
+                session, 
                 f"{BASE_URL}/kwork/get_reviews",
                 json=payload,
                 headers=headers,
             )
-            resp.raise_for_status()
+            if not resp:
+                logger.error("Failed to fetch reviews for kwork %d after retries", kwork_id)
+                break
 
             try:
                 data = resp.json()
