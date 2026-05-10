@@ -30,7 +30,7 @@ python3 kwork-scraper.py -c design -d postgresql://user:pass@host/db
 | `--database` | `-d`  | Database URL (SQLite or PostgreSQL)                | `sqlite:///kwork.db` |
 ### 📋️ Expected implementation
 
-Python standard `logging` and `argparse` libraries should be used. All exceptions should be handled and logged accordingly.  Current progress on how much `categories`, `kworks` and `reviews` are already scraped and how much left to scrape should also be logged. Progress tracking can be done internally for `categories`, through `total` field for `kworks` and through `goodReviews` and `badReviews` for `reviews`. All requests should be made with random delay from 1 to 3 seconds. 
+Python standard `logging` and `argparse` libraries should be used. All exceptions should be handled and logged accordingly.  Current progress on how much `categories`, `kworks` and `reviews` are already scraped and how much left to scrape should also be logged. Progress tracking can be done internally for `categories`, through `total` field for `kworks` and through `goodReviews` and `badReviews` for `reviews`. All requests should be made with random delay from 1 to 3 seconds. `httpx.Client` aka `session` should be used everywhere rather than raw `httpx.get` or `httpx.post` to maintain cookies. New session per category. Kworks and reviews are requested under same category `session`.
 
 # 🗄️ Database and models
 
