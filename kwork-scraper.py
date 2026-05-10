@@ -340,7 +340,7 @@ def fetch_catalog_page(
 # --- Kwork page scraping ---
 
 
-def scrape_kwork_page(session: httpx.Client, kwork_url: str, category_id: int, db):
+def scrape_kwork_page(session: httpx.Client, kwork_url: str, db):
     url = urljoin(BASE_URL, kwork_url)
     resp = safe_request("GET", session, url)
     if not resp:
@@ -371,6 +371,11 @@ def scrape_kwork_page(session: httpx.Client, kwork_url: str, category_id: int, d
         std = packages.get("standard", {})
         if isinstance(std, dict) and std.get("desc"):
             result_text = std["desc"]
+
+    # Resolve category_id from categoryUrl
+    category_url = kwork_data.get("categoryUrl", "")
+    slug = category_url.removeprefix("categories/")
+    category_id = get_db_category_id_by_slug(db, slug)
 
     kwork_record = {
         "id": kwork_data.get("id"),
@@ -565,7 +570,7 @@ def process_category(session: httpx.Client, db, slug: str, filters: dict[str, st
                 len(scraped) + 1,
                 total_kworks,
             )
-            scrape_kwork_page(session, kwork_url, category_id, db)
+            scrape_kwork_page(session, kwork_url, db)
             scrape_reviews(session, kwork_id, db)
             scraped.add(kwork_id)
 
