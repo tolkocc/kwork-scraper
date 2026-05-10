@@ -1,0 +1,4 @@
+httpx
+dataset
+fake-useragent
+psycopg2-binary
