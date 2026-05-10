@@ -81,6 +81,13 @@ def parse_args():
         metavar=("MIN", "MAX"),
         help="Requests delay range in seconds (default: 1.0 3.0)",
     )
+    parser.add_argument(
+        "-s",
+        "--skip-existing",
+        action="store_true",
+        default=False,
+        help="Skip kworks already present in the database",
+    )
     return parser.parse_args()
 
 
@@ -519,7 +526,7 @@ def scrape_reviews(session: httpx.Client, kwork_id: int, db):
 # --- Main orchestration ---
 
 
-def process_category(session: httpx.Client, db, slug: str, filters: dict[str, str]):
+def process_category(session: httpx.Client, db, slug: str, filters: dict[str, str], skip_existing: bool = False):
     category_id = get_db_category_id_by_slug(db, slug)
     if category_id is None:
         logger.error("Category slug '%s' not found in database", slug)
@@ -561,6 +568,11 @@ def process_category(session: httpx.Client, db, slug: str, filters: dict[str, st
             exclude_ids.append(kwork_id)
 
             if kwork_id in scraped:
+                continue
+
+            if skip_existing and db["kworks"].find_one(id=kwork_id):
+                logger.info("Skipping kwork %d (already in db): %d/%d", kwork_id, len(scraped) + 1, total_kworks)
+                scraped.add(kwork_id)
                 continue
 
             random_delay()
@@ -638,7 +650,7 @@ def main():
         logger.info("=" * 60)
         session = create_http_client()
         try:
-            process_category(session, db, slug, filters)
+            process_category(session, db, slug, filters, args.skip_existing)
         except Exception:
             logger.exception("Error processing category '%s'", slug)
         finally:

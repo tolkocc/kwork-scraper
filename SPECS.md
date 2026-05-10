@@ -1,7 +1,7 @@
 # 💡 Overview
 
 **Name:** kwork-scraper
-**Description:** Open-source scraper for kwork.ru. Collects services, sellers, prices and reviews into SQLite/PostgreSQL for further analysis.
+**Description:** Open-source scraper for kwork.ru. Collects services, reviews and users into SQLite/PostgreSQL for further analysis
 **Requirements:**
 - [httpx](https://pypi.org/project/httpx)
 - [dataset](https://pypi.org/project/dataset)
@@ -24,14 +24,18 @@ python3 kwork-scraper.py -c design -d postgresql://user:pass@host/db
 
 # With custom delay range 
 python3 kwork-scraper.py -c design -D 0.5 2.5
+
+# Skip kworks already in database 
+python3 kwork-scraper.py -c design -s
 ```
 
-| Option       | Short | Description                                        | Default              |
-| ------------ | ----- | -------------------------------------------------- | -------------------- |
-| `--category` | `-c`  | Category slug (repeatable)                         | —                    |
-| `--filter`   | `-f`  | Platform filter in `key=value` format (repeatable) | —                    |
-| `--database` | `-d`  | Database URL (SQLite or PostgreSQL)                | `sqlite:///kwork.db` |
-| `--delay`    | `-D`  | Requests delay range in seconds: MIN MAX           | `1.0 3.0`            |
+| Option            | Short | Description                                        | Default              |
+| ----------------- | ----- | -------------------------------------------------- | -------------------- |
+| `--category`      | `-c`  | Category slug (repeatable)                         | —                    |
+| `--filter`        | `-f`  | Platform filter in `key=value` format (repeatable) | —                    |
+| `--database`      | `-d`  | Database URL (SQLite or PostgreSQL)                | `sqlite:///kwork.db` |
+| `--delay`         | `-D`  | Requests delay range in seconds: MIN MAX           | `1.0 3.0`            |
+| `--skip-existing` | `-s`  | Skip kworks already present in the database        | `False`              |
 ### 📋️ Expected implementation
 
 Python standard `logging` and `argparse` libraries should be used. All exceptions and warnings should be handled and logged accordingly. All requests should be made with random delay. `httpx.Client` aka `session` should be used everywhere rather than raw `httpx.get` or `httpx.post` to maintain cookies. New session per category. Kworks and reviews are requested under same category `session`. 

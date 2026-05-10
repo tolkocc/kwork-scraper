@@ -33,6 +33,9 @@ python3 kwork-scraper.py -c design -d postgresql://user:pass@host/db
 
 # С кастомными задержками между запросами
 python3 kwork-scraper.py -c design -D 0.5 2.5
+
+# Пропустить кворки, которые уже в базе данных
+python3 kwork-scraper.py -c design -s
 ```
 
 | Опция        | Короткая | Описание                                           | По умолчанию         |
